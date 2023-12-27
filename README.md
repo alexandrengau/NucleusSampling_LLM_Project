@@ -7,9 +7,7 @@
 This project is the final homework assignment for the Large Language Model class of the IASD (Artificial Intelligence, Systems and Data) Master Program 2023/2024, at PSL Research University (Université PSL).
 
 *The project achieved the following objectives:*
--
--
--
+- *insert what the project achieves*
 
 ## General Information
 
