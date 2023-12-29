@@ -2,4 +2,4 @@ transformers
 torch
 sentencepiece
 sacremoses
-tqdm
+datasets
