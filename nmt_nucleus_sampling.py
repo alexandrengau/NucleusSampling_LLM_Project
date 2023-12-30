@@ -1,8 +1,8 @@
+# https://huggingface.co/docs/transformers/v4.36.1/en/main_classes/text_generation#transformers.GenerationConfig
+
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 import torch.nn.functional as F
-import numpy as np
-from datasets import load_dataset
 
 
 def translate(model, tokenizer, input_text, max_length=200, top_p=0.5):
@@ -16,6 +16,7 @@ def translate(model, tokenizer, input_text, max_length=200, top_p=0.5):
         top_k=0,
         num_beams=1,
         do_sample=True,
+        decoder_start_token_id=model.config.pad_token_id,
     )
 
     # Generate translation using default generation (beam search)
@@ -23,6 +24,7 @@ def translate(model, tokenizer, input_text, max_length=200, top_p=0.5):
         input_ids,
         max_length=max_length,
         num_beams=4,
+        decoder_start_token_id=model.config.pad_token_id,
     )
 
     return (
@@ -31,32 +33,25 @@ def translate(model, tokenizer, input_text, max_length=200, top_p=0.5):
     )
 
 
-def compute_perplexity(model, tokenizer, generated_text, input_text, reference_text):
-    # Tokenize the input, generated, and reference texts using the appropriate tokenizers
+def compute_perplexity(model, tokenizer, input_text, generated_text):
+    # Encode the input and generated text
     input_ids = tokenizer.encode(input_text, return_tensors='pt')
     generated_ids = tokenizer.encode(generated_text, return_tensors='pt')
-    reference_ids = tokenizer.encode(reference_text, return_tensors='pt')
 
-    # Ensure that generated_ids are used as decoder_input_ids
+    # Ensure that decoder_input_ids or decoder_inputs_embeds is specified
     with torch.no_grad():
-        logits_generated = model(input_ids, decoder_input_ids=generated_ids).logits
-        logits_reference = model(input_ids, decoder_input_ids=reference_ids).logits
+        logits = model(
+            input_ids=input_ids,
+            decoder_input_ids=generated_ids
+        ).logits
 
-    # Flatten the logits and the target labels
-    logits_generated = logits_generated.view(-1, logits_generated.size(-1))
-    logits_reference = logits_reference.view(-1, logits_reference.size(-1))
+    # Flatten the logits and generated_ids for calculating cross-entropy
+    flat_logits = logits.view(-1, logits.size(-1))
 
-    target_labels = reference_ids.view(-1)
+    # Compute perplexity
+    perplexity = torch.exp(F.cross_entropy(flat_logits, generated_ids[0].view(-1)))
 
-    # Compute the cross-entropy loss for both generated and reference sequences
-    loss_generated = F.cross_entropy(logits_generated, target_labels)
-    loss_reference = F.cross_entropy(logits_reference, target_labels)
-
-    # Compute perplexities as the exponentials of the losses
-    perplexity_generated = torch.exp(loss_generated).item()
-    perplexity_reference = torch.exp(loss_reference).item()
-
-    return perplexity_generated, perplexity_reference
+    return perplexity.item()
 
 
 # Load the pre-trained English to French translation model and tokenizer using AutoTokenizer and AutoModelForSeq2SeqLM
@@ -64,32 +59,27 @@ model_name = "Helsinki-NLP/opus-mt-en-fr"
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# Specify the desired language pair
-language_pair = "fr-en"
-
-# Load the WMT14 dataset for the specified language pair without storing it locally
-wmt14_dataset = load_dataset("wmt14", language_pair)
-
-# Randomly sample an index from the available translations
-sample_index = np.random.randint(len(wmt14_dataset["train"]))
-
-# Extract English and French translations for the sampled index
-input_text = wmt14_dataset["train"][sample_index]["translation"]["en"][:200]
-reference_french_text = wmt14_dataset["train"][sample_index]["translation"]["fr"][:200]
+# Input an English text to translate into French
+input_text = "In the bustling city of New York, where skyscrapers touch the clouds and yellow taxis weave through "\
+             "crowded streets, life is a vibrant tapestry of diversity and opportunity. From the iconic Central "\
+             "Park, where locals find solace in nature's embrace, to the dazzling lights of Times Square that never "\
+             "sleep, the city pulses with energy. As the sun sets over the Hudson River, casting a warm glow on the "\
+             "city skyline, the aroma of diverse cuisines wafts through the air. In the heart of Manhattan, "\
+             "Broadway theaters showcase the finest talents in captivating performances, while museums like the "\
+             "Metropolitan Museum of Art house treasures from centuries past."
 
 # Generate translations using both top-p sampling and default generation (beam search) without progress bars
 translation_top_p, translation_default = translate(model, tokenizer, input_text)
 
 # Compute perplexities for each generated sequence
-perplexity_top_p, baseline_perplexity = compute_perplexity(model, tokenizer, translation_top_p, input_text, reference_french_text)
-perplexity_default, _ = compute_perplexity(model, tokenizer, translation_default, input_text, reference_french_text)
+perplexity_default = compute_perplexity(model, tokenizer, input_text, translation_default)
+perplexity_top_p = compute_perplexity(model, tokenizer, input_text, translation_top_p)
 
 # Print translations
 print("Input Text:\n", input_text, "\n")
 print("Translation (Default Generation - Beam Search):\n", translation_default, "\n")
 print("Translation (Top-p Sampling):\n", translation_top_p, "\n")
 
-# Print and compare perplexities to reference perplexity
-print(f"Baseline Perplexity: {baseline_perplexity:.2f}")
+# Print and compare perplexities
 print(f"Perplexity for Translation (Default Generation): {perplexity_default:.2f}")
 print(f"Perplexity for Translation (Top-p Sampling): {perplexity_top_p:.2f}")
