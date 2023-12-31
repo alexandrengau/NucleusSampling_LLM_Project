@@ -1,0 +1,23 @@
+{
+    "output_path": "",
+    "context_path": false,
+    "cache_path": false,
+    "model_name": "gpt2-large",
+    "seed": 42,
+    "batch_size": 8,
+    "tokens": true,
+    "greedy": true,
+    "t": false,
+    "k": false,
+    "p": false, 
+    "m": false,
+    "w": false,
+    "gumbel": true,
+    "n": 5000,
+    "fixed_length": true,
+    "max_len": 200,
+    "skip": 0,
+    "fin": false
+}
+
+
