@@ -199,53 +199,12 @@ def gumbel_sbs_decode(model, init, w, max_len, sep, device, batch_size):
 
 
 def main():
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--output_path", required=True, type=str,
-    #                     help="file to write output to")
-    # parser.add_argument("--context_path", default=None, type=str,
-    #                     help="file with jsonl contexts")
-    # parser.add_argument('--cache_path', type=str, default=None)
-    # parser.add_argument('--model_name', type=str, default='gpt2-large',
-    #                     help='pretrained model name')
-    # parser.add_argument('--seed', type=int, default=42)
-    # parser.add_argument('--batch_size', type=int, default=8)
-    # parser.add_argument('--tokens', action='store_true')
-    # parser.add_argument('--greedy', action='store_true',
-    #                     help='greedy decoding')
-    # parser.add_argument('-t', type=float, default=None,
-    #                     help='Temperature for sampling')
-    # parser.add_argument('-k', type=int, default=None,
-    #                     help='k for top-k sampling')
-    # parser.add_argument('-p', type=float, default=None,
-    #                     help='p for Nucleus (top-p) sampling')
-    # parser.add_argument('-m', type=float, default=None,
-    #                     help='mass of original dist to interpolate')
-    # parser.add_argument('-w', type=int, default=None,
-    #                     help='width for beam search')
-    # parser.add_argument("--gumbel", action='store_true',
-    #                     help="use gumbel stochastic beam search")
-    # parser.add_argument('-n', type=int, default=5000,
-    #                     help='how many samples to produce')
-    # parser.add_argument('--fixed_length', action='store_true',
-    #                     help='if doing beam search, use this for fixed-length decoding')
-    # parser.add_argument('--max_len', type=int, default=200,
-    #                     help='maximum length of generation')
-    # parser.add_argument('--gpu', type=int, default=0,
-    #                     help="Which GPU to run on")
-    # parser.add_argument('--skip', type=int, default=0,
-    #                     help='skip first n lines')
-    # parser.add_argument('--fin', type=int, default=None,
-    #                     help='maximum number of batches to complete')
-    # args = parser.parse_args()
-
     config = utils.load_json()
 
     if config["seed"] is None:
         import time
         millis = int(round(time.time() * 1000))
         config["seed"] = millis
-
-    print(config)
 
 
     torch.manual_seed(config["seed"])
@@ -254,6 +213,10 @@ def main():
     assert(not (config["k"] and config["p"]))
     with open(config["output_path"], 'w'):
         pass
+
+    # Load dataset
+    print("I'm loading gpt2 datasets")
+    utils.download_datasets()
 
     # Load tokenizer and model
     # This loading functions also add new tokens and embeddings called `special tokens`

@@ -1,9 +1,12 @@
 import json
+import os
+import requests
 from tqdm import tqdm
 
 import torch
 import torch.nn
 import torch.nn.functional as F
+from transformers import GPT2Tokenizer, cached_path
 
 
 def load_json(file_path="./config.json"):
@@ -58,3 +61,65 @@ def load_dataset(dataset_path, batch_size, device, bs=False):
         dataset.append((data, ends))
 
     return dataset
+
+def encode_json():
+    config = load_json()
+
+    tokenizer = GPT2Tokenizer.from_pretrained(config["model_name"], do_lower_case=True)
+    SEP = tokenizer.encode(tokenizer.bos_token)[0]
+
+    with open(config["context_intput_path"], 'r') as input_file, open(config["context_output_path"], 'w') as output_file:
+        for json_str in input_file:
+            j = json.loads(json_str.strip())
+            j['tokens'] = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(j['text']))
+
+            output_file.write(json.dumps(j) + '\n')
+
+
+# For some reason HuggingFace only represent newlines inbetween non-whitespace tokens.
+# So we hardcode this in to avoid strange, uninterpretable workarounds
+NEWLINE = 198
+
+def sublist_end_index(list1, list2):
+    s1, s2 = ' '.join(map(str, list1)), ' '.join(map(str, list2))
+    if s1 in s2:
+        return s2[:s2.index(s1)].count(' ') + s1.count(' ') + 1
+    else:
+        return None
+
+def filter_for_conditional():
+    config = load_json()
+
+    tokenizer = GPT2Tokenizer.from_pretrained(config["model_name"], do_lower_case=True)
+
+    with open(config["conditional_input_path"], 'r') as input_file, open(config["conditional_output_path"], 'w') as output_file:
+        num = 0
+        for json_str in input_file:
+            j = json.loads(json_str.strip())
+            j['tokens'] = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(j['text']))
+            idx = sublist_end_index([NEWLINE, NEWLINE], j['tokens'])
+            if idx is not None and idx < config["conditional_m"]:
+                j['tokens'] = j['tokens'][:idx]
+                output_file.write(json.dumps(j) + '\n')
+                num += 1
+                if num >= config["conditional_n"]:
+                    break
+
+def download_datasets():
+    subdir = 'data'
+    if not os.path.exists(subdir):
+        os.makedirs(subdir)
+    subdir = subdir.replace('\\','/') # needed for Windows
+
+    for split in ['train', 'valid', 'test']:
+        filename = 'small-117M' + "." + split + '.jsonl'
+        r = requests.get("https://openaipublic.azureedge.net/gpt-2/output-dataset/v1/" + filename, stream=True)
+
+        with open(os.path.join(subdir, filename), 'wb') as f:
+            file_size = int(r.headers["content-length"])
+            chunk_size = 1000
+            with tqdm(ncols=100, desc="Fetching " + filename, total=file_size, unit_scale=True) as pbar:
+                # 1k for chunk_size, since Ethernet packet size is around 1500 bytes
+                for chunk in r.iter_content(chunk_size=chunk_size):
+                    f.write(chunk)
+                    pbar.update(chunk_size)
