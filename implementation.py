@@ -21,40 +21,40 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 
-def decode(model, batch_size, max_len, sep, prompt, temp=None, k=None, p=None, greedy=None):
+def decode(model, batch_size, max_len, sep, prompt, temp=False, k=False, p=False, greedy=False):
+    context, ends = prompt
     output=[
         {
             'ended' : False,
             "tokens" : [],
             'len' : 0,
-            "context" : prompt[i].to(device).numpy().tolist
+            "context" : context[i].to(device).numpy().tolist()
         }
     
         for i in range(batch_size)
     ]
 
+    for _ in tqdm(range(max_len)) :
 
-    for _ in range(max_len) :
-
-        #Récupère les score pour le dernier mot du contexte (pas sûr que les 4 prochaines lignes soient corrects)
-        output_model = model(prompt)[0]
+        #Récupère les score pour le dernier mot du contexte (pas sûr que les 4 prochaines lignes soient correctes)
+        output_model = model(context)[0]
         scores = torch.zeros(output_model.size(0), output_model.size(2))
         for i in range(len(output_model)) :
-            scores[i,:] = output_model[i, len(output[i]["context"]),:]
+            scores[i,:] = output_model[i, ends[i],:]
         
 
         #Mise en place de la tempéerature 
-        if temp is not None :
+        if temp is False:
             probs = F.softmax(scores, dim=-1)
         else :
             probs =  F.softmax(scores.div_(temp), dim=-1)
 
-        if k :
+        if k is not False:
             indices_to_remove = probs < torch.topk(probs, k)[0][..., -1, None]
             probs[indices_to_remove] = 0
             tokens = probs.multinomial(1)
 
-        elif p :
+        elif p is not False:
             probs, indices = torch.sort(probs, descending=True)
             probs_cummu = torch.cumsum(probs, dim =-1)
             indice_to_remove = probs_cummu > p
@@ -67,13 +67,13 @@ def decode(model, batch_size, max_len, sep, prompt, temp=None, k=None, p=None, g
         
         #rajout d'une nouvelle ligne vide dans le prompt qu'on va remplir
         filler = torch.zeros((batch_size, 1), dtype=torch.long, device=device)
-        prompt = torch.cat([prompt, filler], dim=1)
+        context = torch.cat([context, filler], dim=1)
         for i in range(batch_size) :
             out = output[i] 
             if out["ended"] :
                 continue
 
-            token = tokens[i].items()
+            token = tokens[i].item()
             if  token == sep :
                 out["ended"] = True
 
@@ -81,10 +81,10 @@ def decode(model, batch_size, max_len, sep, prompt, temp=None, k=None, p=None, g
             out['len'] += 1
 
             #Remplissage de la ligne vide
-            prompt[i, prompt[i].size] = token
+            ends[i] +=1
+            context[i, ends[i]] = token
     
     return output 
-
 
 
 def gumbel_like(*args, **kwargs):
@@ -200,8 +200,9 @@ def gumbel_sbs_decode(model, init, w, max_len, sep, device, batch_size):
 
 def main():
     config = utils.load_json()
+    subdir = 'data'
 
-    if config["seed"] is None:
+    if config["seed"] is False:
         import time
         millis = int(round(time.time() * 1000))
         config["seed"] = millis
@@ -218,7 +219,7 @@ def main():
     utils.filter_for_conditional()
 
     assert(not (config["k"] and config["p"]))
-    with open(config["output_path"], 'w'):
+    with open(os.path.join(subdir, config["output_path"]), 'w'):
         pass
 
     # Load tokenizer and model
@@ -240,35 +241,35 @@ def main():
     # Compute the max input length for the Transformer
     max_length = config["max_len"]
 
-    if config["context_path"] is not None:
-        if config["cache_path"] is not None and os.path.exists(config["cache_path"]):
-            dataset = torch.load(config["cache_path"], map_location=device)
+    if config["context_path"] is not False:
+        if config["cache_path"] is not False and os.path.exists(config["cache_path"]):
+            dataset = torch.load(os.path.join(subdir, config["cache_path"]), map_location=device)
         else:
-            dataset = utils.load_dataset(config["context_path"], config["batch_size"], device, bs=config["w"] is not None)
+            print("I'm supposed to be here")
+            dataset = utils.load_dataset(os.path.join(subdir, config["context_path"]), config["batch_size"], device, bs=config["w"] is not False)
 
-        if config["cache_path"] is not None and not os.path.exists(config["cache_path"]):
+        if config["cache_path"] is not False and not os.path.exists(config["cache_path"]):
             torch.save(dataset, config["cache_path"])
     else:
         dataset = [ None for _ in range(config["n"] // config["batch_size"]) ]
 
     model.eval()
     outputs = []
-    writer = open(config["output_path"], "w")
-    try:
-        for b, batch in enumerate(tqdm(dataset[config["skip"]:config["fin"]], desc="Generating")):
-            with torch.no_grad():
-                if config["w"] is None:
-                    output = decode(model, config["batch_size"], max_length, SEP, device, 
-                                temp=config["t"], k=config["k"], p=config["p"], greedy=config["greedy"],
-                                m=config["m"], init=batch)
-                else:
-                    output = gumbel_sbs_decode(model, batch, config["w"], max_length, SEP, device, config["batch_size"])
-                outputs.extend(output)
-                for o in output:
-                    o['string'] = tokenizer.decode(o['tokens'])
-                    print(json.dumps(o), file=writer, flush=True)
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    writer = open(os.path.join(subdir, config["output_path"]), "w")
+
+    for b, batch in enumerate(tqdm(dataset, desc="Generating")):
+        with torch.no_grad():
+            if config["w"] is False:
+                print("I'm also supposed to be here")
+                output = decode(model, config["batch_size"], max_length, SEP, batch, 
+                            temp=config["t"], k=config["k"], p=config["p"], greedy=config["greedy"])
+            else:
+                output = gumbel_sbs_decode(model, batch, config["w"], max_length, SEP, device, config["batch_size"])
+            outputs.extend(output)
+            for o in output:
+                o['cond'] = tokenizer.decode(o['context'])
+                o['gen'] = tokenizer.decode(o['tokens'])
+                print(json.dumps(o), file=writer, flush=True)
 
     writer.close()
 

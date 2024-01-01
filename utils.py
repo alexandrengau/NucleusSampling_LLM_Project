@@ -114,7 +114,6 @@ def filter_for_conditional():
             num = 0
             for json_str in tqdm(input_file, total=total_lines, desc="Filtering"):
                 j = json.loads(json_str.strip())
-                j['tokens'] = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(j['text']))
                 idx = sublist_end_index([NEWLINE, NEWLINE], j['tokens'])
                 if idx is not None and idx < config["conditional_m"]:
                     j['tokens'] = j['tokens'][:idx]
