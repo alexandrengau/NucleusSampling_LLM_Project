@@ -210,13 +210,16 @@ def main():
     torch.manual_seed(config["seed"])
     torch.cuda.manual_seed_all(config["seed"])
 
+    # Load dataset for conditional generation
+    utils.download_datasets()
+    # Tokenization of dataset with the model
+    utils.encode_json()
+    #Filtering of dataset
+    utils.filter_for_conditional()
+
     assert(not (config["k"] and config["p"]))
     with open(config["output_path"], 'w'):
         pass
-
-    # Load dataset
-    print("I'm loading gpt2 datasets")
-    utils.download_datasets()
 
     # Load tokenizer and model
     # This loading functions also add new tokens and embeddings called `special tokens`

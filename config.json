@@ -2,7 +2,7 @@
     "output_path" : "",
     "context_path" : false,
     "cache_path" : false,
-    "model_name" : "gpt2-small:",
+    "model_name" : "gpt2",
     "seed" : 42,
     "batch_size" : 8,
     "tokens" : true,
@@ -18,13 +18,13 @@
     "max_len" : 200,
     "skip" : 0,
     "fin" : false,
-    "context_input_path" : "",
-    "context_output_path" : "",
+    "context_input_path" : "small-117M.test.jsonl",
+    "context_output_path" : "tokenized.small-117M.test.jsonl",
     "context_cut" : false,
-    "conditional_input_path" : "",
-    "conditional_output_path" : "",
+    "conditional_input_path" : "tokenized.small-117M.test.jsonl",
+    "conditional_output_path" : "filtered.small-117M.test.jsonl",
     "conditional_seed" : 0,
-    "conditionnal_m" : 40,
+    "conditional_m" : 40,
     "conditional_n" : 5000
 
 }
