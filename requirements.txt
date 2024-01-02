@@ -1,4 +1,4 @@
-transformers
+transformers == 4.21.3.
 torch
 sentencepiece
 sacremoses
