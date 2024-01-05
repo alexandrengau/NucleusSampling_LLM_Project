@@ -21,7 +21,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 
-def decode(model, batch_size, max_len, sep, prompt, temp=False, k=False, p=False, greedy=False):
+def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False):
     context, ends = prompt
     output=[
         {
@@ -34,7 +34,7 @@ def decode(model, batch_size, max_len, sep, prompt, temp=False, k=False, p=False
         for i in range(batch_size)
     ]
 
-    for _ in tqdm(range(max_len)) :
+    for _ in tqdm(range(gen_len)) :
 
         #Récupère les score pour le dernier mot du contexte (pas sûr que les 4 prochaines lignes soient correctes)
         output_model = model(context)[0]
@@ -58,8 +58,10 @@ def decode(model, batch_size, max_len, sep, prompt, temp=False, k=False, p=False
             probs, indices = torch.sort(probs, descending=True)
             probs_cummu = torch.cumsum(probs, dim =-1)
             indice_to_remove = probs_cummu > p
-            probs_cummu[indice_to_remove] = 0
-            indice_tokens = probs_cummu.multinomial(1).view(-1,1)
+            indice_to_remove[:,1:] = indice_to_remove[:,:-1]
+            indice_to_remove[:,0] = 0
+            probs[indice_to_remove] = 0
+            indice_tokens = probs.multinomial(1).view(-1,1)
             tokens = indices.gather(1,indice_tokens)
         
         else :
@@ -87,17 +89,8 @@ def decode(model, batch_size, max_len, sep, prompt, temp=False, k=False, p=False
     return output 
 
 
-def gumbel_like(*args, **kwargs):
-    return _gumbel(torch.rand_like(*args, **kwargs))
-
-
 def gumbel(*args, **kwargs):
-    return _gumbel(torch.rand(*args, **kwargs))
-
-
-def _gumbel(u):
-    return -torch.log(-torch.log(u))
-
+    return -torch.log(-torch.log(torch.rand(*args, **kwargs)))
 
 def gumbel_with_maximum(phi, T, dim=-1):
     """
@@ -105,31 +98,19 @@ def gumbel_with_maximum(phi, T, dim=-1):
     phi.max(dim)[0] should be broadcastable with the desired maximum T
     """
     # Gumbel with location phi
-    g_phi = phi + gumbel_like(phi)
+    g_phi = phi + gumbel(phi)
     Z, argmax = g_phi.max(dim)
-    g = _shift_gumbel_maximum(g_phi, T, dim, Z=Z)
-    # CHECK_VALIDITY = True
-    # if CHECK_VALIDITY:
-    #     g_inv = _shift_gumbel_maximum(g, Z, dim)
-    #     assert (((g_phi - g_inv) < 1e-3) | (g_phi == g_inv)).all()
-    return g, argmax
-
-def _shift_gumbel_maximum(g_phi, T, dim=-1, Z=None):
     if Z is None:
         Z, _ = g_phi.max(dim)
     u = T.unsqueeze(dim) - g_phi + torch.log1p(-torch.exp(g_phi - Z.unsqueeze(dim)))
-    return T.unsqueeze(dim) - F.relu(u) - torch.log1p(torch.exp(-u.abs()))
+    g = T.unsqueeze(dim) - F.relu(u) - torch.log1p(torch.exp(-u.abs()))
+    return g, argmax
 
-def gumbel_sbs_decode(model, init, w, max_len, sep, device, batch_size):
-    if init is None:
-        context = torch.full((batch_size, 1), sep, dtype=torch.long, device=device)
-        ends = torch.zeros_like(context[:, 0])
-    else:
-        context, ends = init
-    assert (all([ends[i] == ends[0] for i in range(len(ends))]))
+
+def gumbel_decode(model, prompt, batch_size, gen_length, sep, w):
+    context, ends = prompt
+
     cur_len = ends[0] + 1
-    batch_size = context.size(0)
-    context_cpu = context.cpu()
 
     beam = context.repeat(w, 1, 1).transpose(0, 1).reshape(batch_size * w, cur_len)
     beam_offset = (torch.arange(batch_size) * w).repeat(w, 1).t().reshape(-1).to(device)
@@ -137,7 +118,7 @@ def gumbel_sbs_decode(model, init, w, max_len, sep, device, batch_size):
     beam_ll = torch.zeros(batch_size, w, device=device)
     best_outputs, best_ll, best_gumbel, best_nlls = [[None for _ in range(batch_size)] for _ in range(4)]
 
-    for i in trange(max_len):
+    for i in trange(gen_length):
         if i == 0:
             logits = model(context)[0][:, -1, :]  # (batch_size, V)
             logprobs = F.log_softmax(logits, -1)  # (batch_size, V)
@@ -185,7 +166,7 @@ def gumbel_sbs_decode(model, init, w, max_len, sep, device, batch_size):
 
     outputs = [{} for _ in range(batch_size)]
     for b, output in enumerate(outputs):
-        output['context'] = context_cpu[b].tolist()
+        output['context'] = context[b].tolist()
         output['ended'] = best_outputs[b] is not None
         output['tokens'] = (best_outputs[b] if best_outputs[b] is not None else beam[w * b]).tolist()
         output['tokens'] = output['tokens'][len(output['context']):]
@@ -239,7 +220,7 @@ def main():
         return list(tokenize_and_encode(o) for o in obj)
 
     # Compute the max input length for the Transformer
-    max_length = config["max_len"]
+    gen_length = config["gen_len"]
 
     if config["context_path"] is not False:
         if config["cache_path"] is not False and os.path.exists(config["cache_path"]):
@@ -261,10 +242,10 @@ def main():
         with torch.no_grad():
             if config["w"] is False:
                 print("I'm also supposed to be here")
-                output = decode(model, config["batch_size"], max_length, SEP, batch, 
-                            temp=config["t"], k=config["k"], p=config["p"], greedy=config["greedy"])
+                output = decode(model, batch, config["batch_size"], gen_length, SEP, 
+                            temp=config["t"], k=config["k"], p=config["p"])
             else:
-                output = gumbel_sbs_decode(model, batch, config["w"], max_length, SEP, device, config["batch_size"])
+                output = gumbel_decode(model, batch, config["batch_size"], gen_length, SEP, config["w"])
             outputs.extend(output)
             for o in output:
                 o['cond'] = tokenizer.decode(o['context'])
