@@ -1,24 +1,15 @@
-import argparse
 import os
-import logging
 import json
-
 from tqdm import tqdm, trange
-
-import numpy as np
-
 import torch
 import torch.nn
 import torch.nn.functional as F
-from torch.distributions.gumbel import Gumbel
 
 
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import utils
 
-data_path=""
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 
 def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False):
@@ -196,14 +187,6 @@ def main():
     model = GPT2LMHeadModel.from_pretrained(config["model_name"])
     model.to(device)
     SEP = tokenizer.encode(tokenizer.bos_token)[0]
-
-    def tokenize_and_encode(obj):
-        """ Tokenize and encode a nested object """
-        if isinstance(obj, str):
-            return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
-        elif isinstance(obj, int):
-            return obj
-        return list(tokenize_and_encode(o) for o in obj)
 
     # Compute the max input length for the Transformer
     gen_length = config["gen_len"]
