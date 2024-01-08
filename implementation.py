@@ -91,7 +91,6 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
 
 
 def beam_search_decode(model, prompt, gen_length, sep, w):
-
     context, ends = prompt
     current_len = ends[0] + 1
     batch_size = context.size(0)
@@ -195,7 +194,7 @@ def main():
         if config["cache_path"] is not False and os.path.exists(config["cache_path"]):
             dataset = torch.load(os.path.join(subdir, config["cache_path"]), map_location=device)
         else:
-            dataset = utils.load_dataset(os.path.join(subdir, config["context_path"]), config["batch_size"], device, bs=config["w"] is not False)
+            dataset = utils.load_dataset(dataset_path=os.path.join(subdir, config["context_path"]), batch_size = config["batch_size"], device = device, bs=config["w"] is not False)
 
         if config["cache_path"] is not False and not os.path.exists(config["cache_path"]):
             torch.save(dataset, config["cache_path"])
@@ -208,6 +207,7 @@ def main():
 
     for _, batch in enumerate(tqdm(dataset, desc="Generating")):
         with torch.no_grad():
+
             if config["w"] is False:
                 output = decode(model = model,
                                 prompt = batch,

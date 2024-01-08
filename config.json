@@ -9,7 +9,7 @@
     "t" : false,
     "k" : false,
     "p" : 0.85, 
-    "w" : 5, 
+    "w" : 20, 
     "n" : 5000,
     "fixed_length" : true,
     "gen_len" : 50,
