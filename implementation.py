@@ -191,9 +191,6 @@ def main():
     #Filtering of dataset
     utils.filter_for_conditional()
 
-    assert(not (config["k"] and config["p"]))
-    with open(os.path.join(subdir, config["output_path"]), 'w'):
-        pass
 
     tokenizer = GPT2Tokenizer.from_pretrained(config["model_name"], do_lower_case=True)
     model = GPT2LMHeadModel.from_pretrained(config["model_name"])
