@@ -28,6 +28,7 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
             'ended' : False,
             "tokens" : [],
             'len' : 0,
+            'nll4tok'    : [],
             "context" : context[i].to(device).numpy().tolist()
         }
     
@@ -49,10 +50,13 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
         else :
             probs =  F.softmax(scores.div_(temp), dim=-1)
 
+        logprobs = F.log_softmax(scores, dim=-1)
+
         if k is not False:
             indices_to_remove = probs < torch.topk(probs, k)[0][..., -1, None]
             probs[indices_to_remove] = 0
             tokens = probs.multinomial(1)
+            logprobs_selected = probs.gather(1, tokens.view(-1, 1)).log()
 
         elif p is not False:
             probs, indices = torch.sort(probs, descending=True)
@@ -63,9 +67,11 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
             probs[indice_to_remove] = 0
             indice_tokens = probs.multinomial(1).view(-1,1)
             tokens = indices.gather(1,indice_tokens)
+            logprobs_selected = probs.gather(1, indice_tokens).log()
         
         else :
             _, tokens = probs.topk(1)
+            logprobs_selected = logprobs.gather(1, tokens.view(-1, 1))
         
         #rajout d'une nouvelle ligne vide dans le prompt qu'on va remplir
         filler = torch.zeros((batch_size, 1), dtype=torch.long, device=device)
@@ -76,10 +82,13 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
                 continue
 
             token = tokens[i].item()
+            logprob = logprobs_selected[i].item()
+
             if  token == sep :
                 out["ended"] = True
 
             out['tokens'].append(token)
+            out['nll4tok'].append(-logprob)
             out['len'] += 1
 
             #Remplissage de la ligne vide
@@ -89,91 +98,74 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
     return output 
 
 
-def gumbel(*args, **kwargs):
-    return -torch.log(-torch.log(torch.rand(*args, **kwargs)))
 
-def gumbel_with_maximum(phi, T, dim=-1):
-    """
-    Samples a set of gumbels which are conditioned on having a maximum along a dimension
-    phi.max(dim)[0] should be broadcastable with the desired maximum T
-    """
-    # Gumbel with location phi
-    g_phi = phi + gumbel(phi)
-    Z, argmax = g_phi.max(dim)
-    if Z is None:
-        Z, _ = g_phi.max(dim)
-    u = T.unsqueeze(dim) - g_phi + torch.log1p(-torch.exp(g_phi - Z.unsqueeze(dim)))
-    g = T.unsqueeze(dim) - F.relu(u) - torch.log1p(torch.exp(-u.abs()))
-    return g, argmax
+def beam_search_decode(model, prompt, gen_length, sep, w):
 
-
-def gumbel_decode(model, prompt, batch_size, gen_length, sep, w):
     context, ends = prompt
+    current_len = ends[0] + 1
+    batch_size = context.size(0)
 
-    cur_len = ends[0] + 1
+    # Crée le tensor avec w fois le contexte répété
+    beam = context.repeat(w, 1, 1).transpose(0,1).reshape(batch_size*w, current_len)
+    
+    # Création de la matrice offset, elle est utilisée comme décalage pour indexer correctement la matrice beam
+    beam_offset = (torch.arange(batch_size)*w*w).repeat(w, 1).t().reshape(-1).to(device)
+    
+    current_outputs, current_logprobs, current_Negalogprobs = [[None for _ in range(batch_size)] for _ in range(3)]
 
-    beam = context.repeat(w, 1, 1).transpose(0, 1).reshape(batch_size * w, cur_len)
-    beam_offset = (torch.arange(batch_size) * w).repeat(w, 1).t().reshape(-1).to(device)
-    beam_nlls = torch.zeros(batch_size * w, 1, device=device)
-    beam_ll = torch.zeros(batch_size, w, device=device)
-    best_outputs, best_ll, best_gumbel, best_nlls = [[None for _ in range(batch_size)] for _ in range(4)]
 
     for i in trange(gen_length):
         if i == 0:
-            logits = model(context)[0][:, -1, :]  # (batch_size, V)
-            logprobs = F.log_softmax(logits, -1)  # (batch_size, V)
-            gumbel = gumbel_like(logprobs) + logprobs  # (batch_size, V)
-            z, _ = gumbel.max(dim=-1, keepdims=True)  # (batch_size, 1)
-            gumbel_tilde = -(-torch.exp(-z)+torch.exp(-gumbel)+1.0).log()  # (batch_size, V), +1.0 is exp(-G_phi_N)
+            #récupere log prob pour le contexte
+            scores = model(context)[0][:, -1, :] 
+            logprobs = F.log_softmax(scores, -1)  
+            w_logprobs, w_tokens = torch.topk(logprobs, w)
+            tokens = w_tokens.view(-1)  
+            logprobs = w_logprobs.view(-1)
 
-            beam_gumbel, w_tokens = torch.topk(gumbel_tilde, w)  # (batch_size, w)
-            cur_tokens = w_tokens.view(-1)  # (batch_size*w,)
-            cur_lls = logprobs.gather(-1, w_tokens).view(-1)  # (batch_size*w,)
+            #Ajout pour chaque ligne du
+            beam = torch.cat([beam, tokens.unsqueeze(-1)], -1) 
+            beam_NegaLogprobs = -logprobs.unsqueeze(-1)
+            beam_logprobs = logprobs.view(batch_size, w)
 
         else:
-            logits = model(beam)[0][:, -1, :]  # (batch_size*w, V)
-            V = logits.size(-1)
-            logprobs = F.log_softmax(logits, -1)  # (batch_size*w, V)
-            gumbel = Gumbel(loc=logprobs+beam_ll.view(batch_size*w, 1), scale=1.0).sample()  # (batch_size*w, V)
-            z, _ = gumbel.max(dim=-1, keepdims=True)  # (batch_size*w, 1)
-            gumbel_tilde, _ = gumbel_with_maximum(
-                logprobs+beam_ll.view(batch_size*w, 1),  # (batch_size*w, V)
-                beam_gumbel.view(batch_size*w), # (batch_size*w,)
-                dim=-1)  # gumbel_tilde: (batch_size*w, V)
+            #récupere les logprob pour les faisceaux
+            scores = model(beam)[0][:, -1, :] 
+            logprobs = F.log_softmax(scores, -1)  
+            w_logprobs, w_tokens = torch.topk(logprobs, w)
 
-            beam_gumbel, beam_idxs = torch.topk(gumbel_tilde.view(batch_size, w*V), w)  # (batch_size, w), beam_idxs in [0,w*V)
-            beam = beam[beam_idxs.view(-1)//V + beam_offset]  # (batch_size*w, cur_len)
-            cur_tokens = (beam_idxs % V).view(-1)  # (batch_size*w,)
-            cur_lls = logprobs.view(batch_size, w*V).gather(-1, beam_idxs).view(-1)  # (batch_size*w,)
+            #On calcul les logprob accumulés
+            accumulated_logprobs = (w_logprobs + beam_logprobs.view(-1).repeat(w, 1).t()).reshape(batch_size, w*w)
+            #On va chercher pour chaque context les w suites possibles 
+            beam_logprobs, beam_idxs = accumulated_logprobs.topk(w)  # both: (batch_size, w)
+            beam_idxs = beam_idxs.view(-1) + beam_offset  # (batch_size*w,)
+            tokens = w_tokens.view(-1)[beam_idxs]  # (batch_sze*w,)
+            logprobs = w_logprobs.view(-1)[beam_idxs]  # (batch_size*w,)
+            
+            #Actualisation du faisceau
+            beam = beam.repeat(1, w).view(batch_size*w*w, current_len)[beam_idxs]  # (batch_size*w, current_len)
+            beam = torch.cat([beam, tokens.unsqueeze(-1)], -1)  # (batch_size*w, current_len+1)
+            beam_NegaLogprobs = beam_NegaLogprobs.repeat(1, w).view(batch_size*w*w, current_len - ends[0] - 1)[beam_idxs]
+            beam_NegaLogprobs = torch.cat([beam_NegaLogprobs, -logprobs.unsqueeze(-1)], -1)
 
-        beam = torch.cat([beam, cur_tokens.unsqueeze(-1)], -1)  # (batch_size*w, cur_len+1)
-        beam_nlls = torch.cat([beam_nlls, cur_lls.unsqueeze(-1)], -1)
-        beam_ll += cur_lls.view(batch_size, w)
-        cur_len += 1
+        current_len += 1
 
-        if cur_tokens.eq(sep).sum() > 0:
-            for b in range(batch_size):
-                offset = b * w
-                toks = cur_tokens[offset:offset + w].tolist()
-                for idx, tok in enumerate(toks):
-                    if tok == sep and (best_outputs[b] is None or beam_gumbel[b, idx] > best_gumbel[b]):
-                        best_outputs[b] = beam[offset + idx]
-                        best_nlls[b] = beam_nlls[offset + idx]
-                        best_ll[b] = beam_ll[b, idx]
-                        best_gumbel[b] = beam_gumbel[b, idx]
-        if all(best_ll[b] is not None and best_ll[b] > beam_ll[b, 0] for b in range(batch_size)):
-            break
+        for b in range(batch_size):
+            offset = b*w
+            current_tokens = tokens[offset:offset+w].tolist()
+            for idx, tok in enumerate(current_tokens):
+                if tok == sep and (current_outputs[b] is None or beam_logprobs[b, idx] > current_logprobs[b]):
+                    current_outputs[b] = beam[offset+idx]
+                    current_Negalogprobs[b] = beam_NegaLogprobs[offset+idx]
+                    current_logprobs[b] = beam_logprobs[b, idx]
 
     outputs = [{} for _ in range(batch_size)]
     for b, output in enumerate(outputs):
         output['context'] = context[b].tolist()
-        output['ended'] = best_outputs[b] is not None
-        output['tokens'] = (best_outputs[b] if best_outputs[b] is not None else beam[w * b]).tolist()
+        output['ended'] = current_outputs[b] is not None
+        output['tokens'] = (current_outputs[b] if current_outputs[b] is not None else beam[w*b]).tolist()
         output['tokens'] = output['tokens'][len(output['context']):]
-        output['nll4tok'] = (best_nlls[b] if best_nlls[b] is not None else beam_nlls[w * b]).tolist()
-        output['nll4tok'] = [-x for x in output['nll4tok'][1:]]
-        output['ppl4tok'] = [np.exp(nll) for nll in output['nll4tok']]
-        output['ppl'] = np.exp(sum(output['nll4tok']) / len(output['nll4tok']))
+        output['nll4tok'] = (current_Negalogprobs[b] if current_Negalogprobs[b] is not None else beam_NegaLogprobs[w*b]).tolist()
         output['len'] = len(output['tokens'])
 
     return outputs
@@ -203,9 +195,6 @@ def main():
     with open(os.path.join(subdir, config["output_path"]), 'w'):
         pass
 
-    # Load tokenizer and model
-    # This loading functions also add new tokens and embeddings called `special tokens`
-    # These new embeddings will be fine-tuned on the RocStories dataset
     tokenizer = GPT2Tokenizer.from_pretrained(config["model_name"], do_lower_case=True)
     model = GPT2LMHeadModel.from_pretrained(config["model_name"])
     model.to(device)
@@ -226,7 +215,6 @@ def main():
         if config["cache_path"] is not False and os.path.exists(config["cache_path"]):
             dataset = torch.load(os.path.join(subdir, config["cache_path"]), map_location=device)
         else:
-            print("I'm supposed to be here")
             dataset = utils.load_dataset(os.path.join(subdir, config["context_path"]), config["batch_size"], device, bs=config["w"] is not False)
 
         if config["cache_path"] is not False and not os.path.exists(config["cache_path"]):
@@ -238,14 +226,23 @@ def main():
     outputs = []
     writer = open(os.path.join(subdir, config["output_path"]), "w")
 
-    for b, batch in enumerate(tqdm(dataset, desc="Generating")):
+    for _, batch in enumerate(tqdm(dataset, desc="Generating")):
         with torch.no_grad():
             if config["w"] is False:
-                print("I'm also supposed to be here")
-                output = decode(model, batch, config["batch_size"], gen_length, SEP, 
-                            temp=config["t"], k=config["k"], p=config["p"])
-            else:
-                output = gumbel_decode(model, batch, config["batch_size"], gen_length, SEP, config["w"])
+                output = decode(model = model,
+                                prompt = batch,
+                                batch_size = config["batch_size"],
+                                gen_len = gen_length,
+                                sep = SEP, 
+                                temp = config["t"], 
+                                k = config["k"], 
+                                p = config["p"])
+            else :
+                output = beam_search_decode(model = model,
+                                       prompt = batch,
+                                       gen_length = gen_length,
+                                       sep = SEP, 
+                                       w = config["w"])
             outputs.extend(output)
             for o in output:
                 o['cond'] = tokenizer.decode(o['context'])
