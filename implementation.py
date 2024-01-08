@@ -227,7 +227,10 @@ def main():
             for o in output:
                 o['cond'] = tokenizer.decode(o['context'])
                 o['gen'] = tokenizer.decode(o['tokens'])
-                print(json.dumps(o), file=writer, flush=True)
+                print(json.dumps(o, indent=4), file=writer, flush=True)
+
+    ppl = utils.perplexity()
+    print(ppl)
 
     writer.close()
 

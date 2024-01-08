@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 import torch
 import torch.nn
-import torch.nn.functional as F
+import numpy as np
 from transformers import GPT2Tokenizer
 
 
@@ -144,3 +144,18 @@ def download_datasets():
                     for chunk in r.iter_content(chunk_size=chunk_size):
                         f.write(chunk)
                         pbar.update(chunk_size)
+
+
+def perplexity():
+    config = load_json()
+    nlls = []
+    with open(config["output_path"], 'r') as input_file:
+        for json_str in input_file:
+            if len(json_str.strip()) == 0:
+                continue
+            j = json.loads(json_str.strip())
+            nll4tok = j['nll4tok']
+            nlls += nll4tok
+    n = len(nlls)
+    ppl = np.exp(sum(map(lambda nll: nll / n, nlls)))
+    return ppl
