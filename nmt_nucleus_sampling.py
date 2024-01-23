@@ -5,6 +5,7 @@ import json
 import random
 import numpy as np
 from nltk.translate.bleu_score import corpus_bleu
+from tqdm import tqdm
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -64,7 +65,7 @@ def translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7, de
         # Load JSON data
         data = json.load(json_file)
 
-        for elt in data:
+        for elt in tqdm(data, desc="Translating Dataset"):
             # Encode the input text using the tokenizer
             input_ids = tokenizer.encode(elt["source"], return_tensors='pt').to(device)
 
