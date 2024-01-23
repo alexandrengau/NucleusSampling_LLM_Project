@@ -206,7 +206,7 @@ def main(random_sentence_translation=True,
 
 
 if __name__ == "__main__":
-    main(random_sentence_translation=True,
-         dataset_translation=False,
+    main(random_sentence_translation=False,
+         dataset_translation=True,
          bleu_score_evaluation=False,
          device=device)
