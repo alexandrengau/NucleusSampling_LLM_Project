@@ -44,35 +44,40 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
         logprobs = F.log_softmax(scores, dim=-1)
 
         if k is not False:
-            indices_to_remove = probs < torch.topk(probs, k)[0][..., -1, None]
-            probs[indices_to_remove] = 0
-            tokens = probs.multinomial(1)
-            logprobs_selected = probs.gather(1, tokens.view(-1, 1)).log()
+            probs, tokens = torch.topk(probs, k)
+            selected_indices = probs.multinomial(1)
+            token_selected = tokens.gather(1, selected_indices.view(-1, 1))
+            logprobs_selected = probs.gather(1, selected_indices.view(-1, 1)).log()
 
         elif p is not False:
-            probs, indices = torch.sort(probs, descending=True)
-            probs_cummu = torch.cumsum(probs, dim =-1)
-            indice_to_remove = probs_cummu > p
-            indice_to_remove[:,1:] = indice_to_remove[:,:-1]
-            indice_to_remove[:,0] = 0
-            probs[indice_to_remove] = 0
-            indice_tokens = probs.multinomial(1).view(-1,1)
-            tokens = indices.gather(1,indice_tokens)
-            logprobs_selected = probs.gather(1, indice_tokens).log()
+            probs_sorted, _ = torch.sort(probs, descending=True)
+            probs_cummu = torch.cumsum(probs_sorted, dim =-1)
+            probs_inf_to_p = probs_cummu <= p
+            nb_indice_to_kept = torch.sum(probs_inf_to_p, dim=-1, dtype=torch.int64)
+            
+            token_selected = torch.zeros(batch_size, 1)
+            logprobs_selected = torch.zeros(batch_size, 1)
+            for i in range(batch_size) :
+                if nb_indice_to_kept[i].item() == 0:
+                    nb_indice_to_kept[i] = 1
+                probs_batch, tokens = torch.topk(probs[i,:], nb_indice_to_kept[i].item())
+                selected_indices = probs_batch.multinomial(1)
+                token_selected[i] = tokens.gather(0, selected_indices.view(-1))
+                logprobs_selected[i] = probs_batch.gather(0, selected_indices.view(-1)).log()
         
         else :
-            _, tokens = probs.topk(1)
+            _, token_selected = probs.topk(1)
             logprobs_selected = logprobs.gather(1, tokens.view(-1, 1))
         
         #rajout d'une nouvelle ligne vide dans le prompt qu'on va remplir
         filler = torch.zeros((batch_size, 1), dtype=torch.long, device=device)
         context = torch.cat([context, filler], dim=1)
         for i in range(batch_size) :
-            out = output[i] 
+            out = output[i]
             if out["ended"] :
                 continue
 
-            token = tokens[i].item()
+            token = token_selected[i].item()
             logprob = logprobs_selected[i].item()
 
             if  token == sep :
@@ -227,12 +232,12 @@ def main():
             for o in output:
                 o['cond'] = tokenizer.decode(o['context'])
                 o['gen'] = tokenizer.decode(o['tokens'])
-                print(json.dumps(o, indent=4), file=writer, flush=True)
+                print(json.dumps(o), file=writer, flush=True)
+    writer.close()
 
     ppl = utils.perplexity()
-    print(ppl)
+    print('ceci devrait être le resultat du ppl:', ppl)
 
-    writer.close()
 
 if __name__ == '__main__':
     main()

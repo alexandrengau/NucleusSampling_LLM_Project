@@ -148,11 +148,13 @@ def download_datasets():
 
 def perplexity():
     config = load_json()
+    subdir = 'data'
     nlls = []
-    with open(config["output_path"], 'r') as input_file:
+    with open(os.path.join(subdir,config["output_path"]), 'r', encoding='utf_8') as input_file:
         for json_str in input_file:
             if len(json_str.strip()) == 0:
                 continue
+
             j = json.loads(json_str.strip())
             nll4tok = j['nll4tok']
             nlls += nll4tok
