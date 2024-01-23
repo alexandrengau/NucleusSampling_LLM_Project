@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+print(device)
 
 
 def load_random_sentence_pairs(json_path):
@@ -65,6 +66,9 @@ def translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7, de
         # Load JSON data
         data = json.load(json_file)
 
+        # Translating only the 1000 first sentences (because of computing time)
+        data = data[:1000]
+
         for elt in tqdm(data, desc="Translating Dataset"):
             # Encode the input text using the tokenizer
             input_ids = tokenizer.encode(elt["source"], return_tensors='pt').to(device)
@@ -107,6 +111,9 @@ def bleu_score(json_path):
     # Load the JSON data
     with open(json_path, 'r', encoding='utf-8') as json_file:
         data = json.load(json_file)
+
+        # Using only the 1000 first sentences that have been translated
+        data = data[:1000]
 
     # Separate source and target sentences
     references = [[sent['target'].split()] for sent in data]
