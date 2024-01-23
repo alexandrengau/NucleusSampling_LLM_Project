@@ -2,7 +2,7 @@
 
 ## Overview
 
-This subdirectory contains English-French sentence pairs extracted from the News-Commentary v16 parallel corpus provided by WMT (Workshop on Machine Translation). The data includes parallel text in 15 languages, and we have specifically focused on English-French language pairs.
+This subdirectory contains English-French sentence pairs extracted from the [News-Commentary v16](https://opus.nlpl.eu/News-Commentary-v16.php) parallel corpus provided by WMT (Workshop on Machine Translation). The data includes parallel text in 15 languages, and we have specifically focused on English-French language pairs.
 
 ### Contents
 
