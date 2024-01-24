@@ -52,7 +52,7 @@ When your code will be tested, we will execute :
 - **utils.py** In the *utils.py* script, you will find all the auxiliary functions required to operate the main file *implementation.py*. These include functions such as *download_datasets()* directly taken from [OpenAI](https://github.com/openai/gpt-2-output-dataset) that download the dataset as described previously. The *encode_json()* and *filter_for_conditional()* functions transform raw files, such as those downloaded above, into files containing the tokens associated with the texts (.tokenized), as well as the texts that can be used for generation (.filtered) (i.e. containing at least one complete sentence).
 You'll also find the *load_dataset(dataset_path, batch_size, device, bs=False)* function, which acts as a Loader in the main script, as well as a perplexity calculation in *perplexity()* for generated texts.
 
-To reproduce the results concerning open-ended generation please set an appropriate context file as described before (usually a portion of the dowloaded ones), set the parameters of *config.json* for your desired results and run:
+To reproduce the results concerning open-ended generation, please set an appropriate context file as described before (usually a portion of the dowloaded ones), set the parameters of *config.json* for your desired results and run:
   > python implementation.py
 
 
