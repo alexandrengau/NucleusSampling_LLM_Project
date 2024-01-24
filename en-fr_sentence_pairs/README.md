@@ -6,9 +6,9 @@ This subdirectory contains English-French sentence pairs extracted from the [New
 
 ### Contents
 
-- **[en-fr.tmx](en-fr.tmx)**: Translation Memory eXchange (TMX) file containing parallel sentence pairs in English and French.
-- **[en-fr_sentence_pairs.json](en-fr_sentence_pairs.json)**: JSON file containing the sentence pairs extracted from en-fr.tmx.
+- **[en-fr.tmx](en-fr.tmx)**: Translation Memory eXchange (TMX) file containing parallel sentence pairs in English and French (manually added to the git from the [source](https://opus.nlpl.eu/News-Commentary-v16.php)).
 - **[extract_tmx.py](extract_tmx.py)**: Python script for extracting sentence pairs from en-fr.tmx and creating en-fr_sentence_pairs.json.
+- **[en-fr_sentence_pairs.json](en-fr_sentence_pairs.json)**: JSON file containing the sentence pairs extracted from en-fr.tmx.
 
 ## Data Source
 

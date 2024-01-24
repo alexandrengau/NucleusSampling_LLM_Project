@@ -60,7 +60,7 @@ def translate(model, tokenizer, input_text, max_length=512, top_p=0.7, device=de
     return decoded_translation_top_p, decoded_translation_default
 
 
-def translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7, device=device):
+def translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7, num_beams=4, device=device):
     # Open the JSON file containing sentence pairs
     with open(json_path, 'r', encoding='utf-8') as json_file:
         # Load JSON data
@@ -88,7 +88,7 @@ def translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7, de
             translation_default = model.generate(
                 input_ids,
                 max_length=max_length,
-                num_beams=4,
+                num_beams=num_beams,
                 decoder_start_token_id=model.config.pad_token_id,
             )
 
@@ -158,6 +158,8 @@ def compute_perplexity(model, tokenizer, reference_text, generated_text, device=
 def main(random_sentence_translation=True,
          dataset_translation=False,
          bleu_score_evaluation=False,
+         top_p=0.7,
+         num_beams=4,
          device=device):
 
     # Load the pre-trained English to French translation model and tokenizer
@@ -203,7 +205,7 @@ def main(random_sentence_translation=True,
 
     if dataset_translation:
         # Input top_p and beam_search translations in the dataset
-        translate_dataset(model, tokenizer, json_path, max_length=512, top_p=0.7)
+        translate_dataset(model, tokenizer, json_path, max_length=512, top_p=top_p, num_beams=num_beams)
 
     if bleu_score_evaluation:
         # Calculate BLEU score for the dataset
@@ -214,4 +216,6 @@ if __name__ == "__main__":
     main(random_sentence_translation=False,
          dataset_translation=False,
          bleu_score_evaluation=True,
+         top_p=0.7,
+         num_beams=4,
          device=device)
