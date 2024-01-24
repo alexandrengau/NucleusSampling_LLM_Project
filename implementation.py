@@ -227,7 +227,7 @@ def main():
     writer.close()
 
     ppl = utils.perplexity()
-    print('ceci devrait être le resultat du ppl:', ppl)
+    print('Perplexity for the generated texts:', ppl)
 
 
 if __name__ == '__main__':
