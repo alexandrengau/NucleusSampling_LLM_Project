@@ -41,7 +41,7 @@ def load_dataset(dataset_path, batch_size, device, bs=False):
             else:
                 data = torch.zeros(1, cur_len).long()
                 data[0, :cur_len] = torch.Tensor(j['tokens']).to(device)
-                dataset.append((data, cur_len-1))
+                dataset.append((data, [cur_len-1]))
 
     return dataset
 
