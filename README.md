@@ -31,7 +31,7 @@ When your code will be tested, we will execute :
 
 
 - **implementation.py** The main script *implementation.py* contains the two decoding functions for the studied methods as well as the the *main()*. 
-  - *main()*, the script will download the OpenAI databases if there are not locally present in the folder *data*. It will then proceed to the preprocessing (tokenization and filtering) of the file that will be used for the context creation (paths to be set in *config.json*). This chosen context will be loaded to serve as the input of the LLM model (we recommand gpt2 model) to then generate a  distribution over each word of its vocabulary for a lenght *gen_len* set in *config.json*. The decoding functions are called there.
+  - *main()*, the script will download the OpenAI databases if there are not locally present in the folder *data*. It will then proceed to the preprocessing (tokenization and filtering) of the file that will be used for the context creation (paths to be set in *config.json*). This chosen context will be loaded to serve as the input of the LLM model (we recommand gpt2 model) to then generate a  distribution over each word of its vocabulary for a lenght *gen_len* set in *config.json*. The decoding functions are called there. Finally the perplexity is computed for the generated texts.
   - *decode(model=model,
             prompt=batch,
             batch_size=config["batch_size"],
@@ -51,6 +51,9 @@ When your code will be tested, we will execute :
 
 - **utils.py** In the *utils.py* script, you will find all the auxiliary functions required to operate the main file *implementation.py*. These include functions such as *download_datasets()* directly taken from [OpenAI](https://github.com/openai/gpt-2-output-dataset) that download the dataset as described previously. The *encode_json()* and *filter_for_conditional()* functions transform raw files, such as those downloaded above, into files containing the tokens associated with the texts (.tokenized), as well as the texts that can be used for generation (.filtered) (i.e. containing at least one complete sentence).
 You'll also find the *load_dataset(dataset_path, batch_size, device, bs=False)* function, which acts as a Loader in the main script, as well as a perplexity calculation in *perplexity()* for generated texts.
+
+To reproduce the results concerning open-ended generation please set an appropriate context file as described before (usually a portion of the dowloaded ones), set the parameters of *config.json* for your desired results and run:
+  > python implementation.py
 
 
 - **en-fr_sentence_pairs** The [en-fr_sentence_pairs](en-fr_sentence_pairs) subdirectory contains English-French sentence pairs extracted from the
