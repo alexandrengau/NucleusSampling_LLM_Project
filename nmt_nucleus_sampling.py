@@ -207,9 +207,7 @@ def main(random_sentence_translation=True,
 
     if bleu_score_evaluation:
         # Calculate BLEU score for the dataset
-        bleu_score_top_p, bleu_score_beam_search = bleu_score(json_path)
-        print("BLEU Score for top_p:", bleu_score_top_p)
-        print("BLEU Score for beam search:", bleu_score_beam_search)
+        bleu_score(json_path)
 
 
 if __name__ == "__main__":
