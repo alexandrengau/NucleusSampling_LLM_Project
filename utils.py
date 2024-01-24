@@ -39,7 +39,6 @@ def load_dataset(dataset_path, batch_size, device, bs=False):
                     tokens, ends = [], []
                     count = 0
             else:
-                
                 data = torch.zeros(count, cur_len).long()
                 for b, (toks, end) in enumerate(zip(tokens, ends)):
                     data[b, :cur_len] = torch.Tensor(toks)
