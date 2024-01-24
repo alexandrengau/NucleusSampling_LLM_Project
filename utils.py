@@ -39,22 +39,9 @@ def load_dataset(dataset_path, batch_size, device, bs=False):
                     tokens, ends = [], []
                     count = 0
             else:
-                data = torch.zeros(count, cur_len).long()
-                for b, (toks, end) in enumerate(zip(tokens, ends)):
-                    data[b, :cur_len] = torch.Tensor(toks)
-                data = data.to(device)
-                dataset.append((data, ends))
-                tokens, ends = [], []
-                count = 0
-                tokens.append(j['tokens'])
-                ends.append(cur_len-1)
-                count += 1
-    if bs and len(tokens) > 0:
-        data = torch.zeros(count, cur_len).long()
-        for b, (toks, end) in enumerate(zip(tokens, ends)):
-            data[b, :cur_len] = torch.Tensor(toks)
-        data = data.to(device)
-        dataset.append((data, ends))
+                data = torch.zeros(1, cur_len).long()
+                data[0, :cur_len-1] = torch.Tensor(j['tokens']).to(device)
+                dataset.append((data, cur_len-1))
 
     return dataset
 
