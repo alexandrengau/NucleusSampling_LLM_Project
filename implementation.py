@@ -98,17 +98,11 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
 def beam_search_decode(model, prompt, gen_length, sep, w):
     context, ends = prompt
     current_len = ends[0] + 1
-    batch_size = context.size(0)
 
-    # Crée le tensor avec w fois le contexte répété
-    beam = context.repeat(w, 1, 1).transpose(0,1).reshape(batch_size*w, current_len)
+    beam = context.repeat(w,1)
+
     
-    # Création de la matrice offset, elle est utilisée comme décalage pour indexer correctement la matrice beam
-    beam_offset = (torch.arange(batch_size)*w*w).repeat(w, 1).t().reshape(-1).to(device)
-    
-    current_outputs, current_logprobs, current_Negalogprobs = [[None for _ in range(batch_size)] for _ in range(3)]
-
-
+    current_outputs, current_logprobs, current_Negalogprobs = [None for _ in range(3)]
     for i in trange(gen_length):
         if i == 0:
             #récupere log prob pour le contexte
@@ -121,7 +115,7 @@ def beam_search_decode(model, prompt, gen_length, sep, w):
             #Ajout pour chaque ligne du
             beam = torch.cat([beam, tokens.unsqueeze(-1)], -1) 
             beam_NegaLogprobs = -logprobs.unsqueeze(-1)
-            beam_logprobs = logprobs.view(batch_size, w)
+            beam_logprobs = logprobs.view(1, w)
 
         else:
             #récupere les logprob pour les faisceaux
@@ -130,40 +124,42 @@ def beam_search_decode(model, prompt, gen_length, sep, w):
             w_logprobs, w_tokens = torch.topk(logprobs, w)
 
             #On calcul les logprob accumulés
-            accumulated_logprobs = (w_logprobs + beam_logprobs.view(-1).repeat(w, 1).t()).reshape(batch_size, w*w)
+            accumulated_logprobs = (w_logprobs + beam_logprobs.repeat(w,1).t())
             #On va chercher pour chaque context les w suites possibles 
-            beam_logprobs, beam_idxs = accumulated_logprobs.topk(w)  # both: (batch_size, w)
-            beam_idxs = beam_idxs.view(-1) + beam_offset  # (batch_size*w,)
-            tokens = w_tokens.view(-1)[beam_idxs]  # (batch_sze*w,)
+            beam_logprobs, beam_idxs = accumulated_logprobs.view(-1).topk(w)  # both: (batch_size, w)
+
+            tokens = w_tokens.view(-1)[beam_idxs]  # (w,)
             logprobs = w_logprobs.view(-1)[beam_idxs]  # (batch_size*w,)
             
             #Actualisation du faisceau
-            beam = beam.repeat(1, w).view(batch_size*w*w, current_len)[beam_idxs]  # (batch_size*w, current_len)
-            beam = torch.cat([beam, tokens.unsqueeze(-1)], -1)  # (batch_size*w, current_len+1)
-            beam_NegaLogprobs = beam_NegaLogprobs.repeat(1, w).view(batch_size*w*w, current_len - ends[0] - 1)[beam_idxs]
-            beam_NegaLogprobs = torch.cat([beam_NegaLogprobs, -logprobs.unsqueeze(-1)], -1)
+            beam_ww = beam.repeat(1, w).view(w*w, current_len) # (batch_size*w, current_len)
 
+            beam_NegaLogprobs_ww = beam_NegaLogprobs.repeat(1, w).view(w*w, current_len - ends[0] - 1)
+            beam = torch.cat((beam, torch.zeros(w, 1, dtype=torch.int64)), dim=1)
+            beam_NegaLogprobs = torch.cat((beam_NegaLogprobs, torch.zeros(w,1)), dim=1)
+            for i in range(w):
+                beam[i] = torch.cat([beam_ww[beam_idxs[i]],tokens[i].view(1)])
+                beam_NegaLogprobs[i] =  torch.cat([beam_NegaLogprobs_ww[beam_idxs[i]], -logprobs[i].view(1)])
         current_len += 1
 
-        for b in range(batch_size):
-            offset = b*w
-            current_tokens = tokens[offset:offset+w].tolist()
-            for idx, tok in enumerate(current_tokens):
-                if tok == sep and (current_outputs[b] is None or beam_logprobs[b, idx] > current_logprobs[b]):
-                    current_outputs[b] = beam[offset+idx]
-                    current_Negalogprobs[b] = beam_NegaLogprobs[offset+idx]
-                    current_logprobs[b] = beam_logprobs[b, idx]
+        
+        
+        for idx, tok in enumerate(tokens.tolist()):
+            if tok == sep and (current_outputs is None or beam_logprobs[idx] > current_logprobs):
+                current_outputs = beam[idx]
+                current_Negalogprobs = beam_NegaLogprobs[idx]
+                current_logprobs= beam_logprobs[idx]
 
-    outputs = [{} for _ in range(batch_size)]
-    for b, output in enumerate(outputs):
-        output['context'] = context[b].tolist()
-        output['ended'] = current_outputs[b] is not None
-        output['tokens'] = (current_outputs[b] if current_outputs[b] is not None else beam[w*b]).tolist()
-        output['tokens'] = output['tokens'][len(output['context']):]
-        output['nll4tok'] = (current_Negalogprobs[b] if current_Negalogprobs[b] is not None else beam_NegaLogprobs[w*b]).tolist()
-        output['len'] = len(output['tokens'])
+    output = [{}]#On le met dans une liste pour que cela soit cohérent avec l'autre décode et qu'on soit pas obligé de faire un division de cas dans le main
+    
+    output[0]['context'] = context[0].tolist()
+    output[0]['ended'] = current_outputs is not None
+    output[0]['tokens'] = (current_outputs if current_outputs is not None else beam[w-1]).tolist()
+    output[0]['tokens'] = output[0]['tokens'][len(output[0]['context']):]
+    output[0]['nll4tok'] = (current_Negalogprobs if current_Negalogprobs is not None else beam_NegaLogprobs[w-1]).tolist()
+    output[0]['len'] = len(output[0]['tokens'])
 
-    return outputs
+    return output
 
 
 def main():
