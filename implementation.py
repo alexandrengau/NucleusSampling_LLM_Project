@@ -10,18 +10,20 @@ from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import utils
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-print("DEVICE : ",device)
+print("DEVICE : ", device)
 
 
-def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False, device=device):
+def decode(
+    model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False, device=device
+):
     context, ends = prompt
     output = [
         {
-            'ended': False,
+            "ended": False,
             "tokens": [],
-            'len': 0,
-            'nll4tok': [],
-            "context": context[i].to(device).cpu().numpy().tolist()
+            "len": 0,
+            "nll4tok": [],
+            "context": context[i].to(device).cpu().numpy().tolist(),
         }
         for i in range(batch_size)
     ]
@@ -59,10 +61,14 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
             for i in range(batch_size):
                 if nb_indice_to_kept[i].item() == 0:
                     nb_indice_to_kept[i] = 1
-                probs_batch, tokens = torch.topk(probs[i, :], nb_indice_to_kept[i].item())
+                probs_batch, tokens = torch.topk(
+                    probs[i, :], nb_indice_to_kept[i].item()
+                )
                 selected_indices = probs_batch.multinomial(1)
                 token_selected[i] = tokens.gather(0, selected_indices.view(-1))
-                logprobs_selected[i] = probs_batch.gather(0, selected_indices.view(-1)).log()
+                logprobs_selected[i] = probs_batch.gather(
+                    0, selected_indices.view(-1)
+                ).log()
 
         else:
             _, token_selected = probs.topk(1)
@@ -82,16 +88,15 @@ def decode(model, prompt, batch_size, gen_len, sep, temp=False, k=False, p=False
             if token == sep:
                 out["ended"] = True
 
-            out['tokens'].append(token)
-            out['nll4tok'].append(-logprob)
-            out['len'] += 1
+            out["tokens"].append(token)
+            out["nll4tok"].append(-logprob)
+            out["len"] += 1
 
             # Fill the empty line
             ends[i] += 1
             context[i, ends[i]] = token
 
     return output
-
 
 
 def beam_search_decode(model, prompt, gen_length, sep, w, device=device):
@@ -122,47 +127,64 @@ def beam_search_decode(model, prompt, gen_length, sep, w, device=device):
             w_logprobs, w_tokens = torch.topk(logprobs, w)
 
             # Calculate accumulated logprobs
-            accumulated_logprobs = (w_logprobs + beam_logprobs.repeat(w, 1).t())
+            accumulated_logprobs = w_logprobs + beam_logprobs.repeat(w, 1).t()
             beam_logprobs, beam_idxs = accumulated_logprobs.view(-1).topk(w)
 
             tokens = w_tokens.view(-1)[beam_idxs]
             logprobs = w_logprobs.view(-1)[beam_idxs]
 
             # Update the beam
-            beam_ww = beam.repeat(1, w).view(w*w, current_len)
-            beam_NegaLogprobs_ww = beam_NegaLogprobs.repeat(1, w).view(w*w, current_len - ends[0] - 1)
-            beam = torch.cat((beam, torch.zeros(w, 1, dtype=torch.int64).to(device)), dim=1)
-            beam_NegaLogprobs = torch.cat((beam_NegaLogprobs, torch.zeros(w, 1).to(device)), dim=1)
+            beam_ww = beam.repeat(1, w).view(w * w, current_len)
+            beam_NegaLogprobs_ww = beam_NegaLogprobs.repeat(1, w).view(
+                w * w, current_len - ends[0] - 1
+            )
+            beam = torch.cat(
+                (beam, torch.zeros(w, 1, dtype=torch.int64).to(device)), dim=1
+            )
+            beam_NegaLogprobs = torch.cat(
+                (beam_NegaLogprobs, torch.zeros(w, 1).to(device)), dim=1
+            )
             for i in range(w):
                 beam[i] = torch.cat([beam_ww[beam_idxs[i]], tokens[i].view(1)])
-                beam_NegaLogprobs[i] = torch.cat([beam_NegaLogprobs_ww[beam_idxs[i]], -logprobs[i].view(1)])
+                beam_NegaLogprobs[i] = torch.cat(
+                    [beam_NegaLogprobs_ww[beam_idxs[i]], -logprobs[i].view(1)]
+                )
 
         current_len += 1
 
         for idx, tok in enumerate(tokens.tolist()):
-            if tok == sep and (current_outputs is None or beam_logprobs[idx] > current_logprobs):
+            if tok == sep and (
+                current_outputs is None or beam_logprobs[idx] > current_logprobs
+            ):
                 current_outputs = beam[idx]
                 current_Negalogprobs = beam_NegaLogprobs[idx]
                 current_logprobs = beam_logprobs[idx]
 
     output = [{}]
 
-    output[0]['context'] = context[0].tolist()
-    output[0]['ended'] = current_outputs is not None
-    output[0]['tokens'] = (current_outputs if current_outputs is not None else beam[w-1]).tolist()
-    output[0]['tokens'] = output[0]['tokens'][len(output[0]['context']):]
-    output[0]['nll4tok'] = (current_Negalogprobs if current_Negalogprobs is not None else beam_NegaLogprobs[w-1]).tolist()
-    output[0]['len'] = len(output[0]['tokens'])
+    output[0]["context"] = context[0].tolist()
+    output[0]["ended"] = current_outputs is not None
+    output[0]["tokens"] = (
+        current_outputs if current_outputs is not None else beam[w - 1]
+    ).tolist()
+    output[0]["tokens"] = output[0]["tokens"][len(output[0]["context"]) :]
+    output[0]["nll4tok"] = (
+        current_Negalogprobs
+        if current_Negalogprobs is not None
+        else beam_NegaLogprobs[w - 1]
+    ).tolist()
+    output[0]["len"] = len(output[0]["tokens"])
 
     return output
 
 
 def main():
     config = utils.load_json()
-    subdir = 'data'
+    subdir = "data"
 
     if config["seed"] is False:
         import time
+
         millis = int(round(time.time() * 1000))
         config["seed"] = millis
 
@@ -186,12 +208,20 @@ def main():
 
     if config["context_path"] is not False:
         if config["cache_path"] is not False and os.path.exists(config["cache_path"]):
-            dataset = torch.load(os.path.join(subdir, config["cache_path"]), map_location=device)
+            dataset = torch.load(
+                os.path.join(subdir, config["cache_path"]), map_location=device
+            )
         else:
-            dataset = utils.load_dataset(dataset_path=os.path.join(subdir, config["context_path"]),
-                                         batch_size=config["batch_size"], device=device, bs=config["w"] is not False)
+            dataset = utils.load_dataset(
+                dataset_path=os.path.join(subdir, config["context_path"]),
+                batch_size=config["batch_size"],
+                device=device,
+                bs=config["w"] is not False,
+            )
 
-        if config["cache_path"] is not False and not os.path.exists(config["cache_path"]):
+        if config["cache_path"] is not False and not os.path.exists(
+            config["cache_path"]
+        ):
             torch.save(dataset, config["cache_path"])
     else:
         dataset = [None for _ in range(config["n"] // config["batch_size"])]
@@ -203,32 +233,36 @@ def main():
     for _, batch in enumerate(tqdm(dataset, desc="Generating")):
         with torch.no_grad():
             if config["w"] is False:
-                output = decode(model=model,
-                                prompt=batch,
-                                batch_size=config["batch_size"],
-                                gen_len=gen_length,
-                                sep=SEP,
-                                temp=config["t"],
-                                k=config["k"],
-                                p=config["p"],
-                                device=device)
+                output = decode(
+                    model=model,
+                    prompt=batch,
+                    batch_size=config["batch_size"],
+                    gen_len=gen_length,
+                    sep=SEP,
+                    temp=config["t"],
+                    k=config["k"],
+                    p=config["p"],
+                    device=device,
+                )
             else:
-                output = beam_search_decode(model=model,
-                                            prompt=batch,
-                                            gen_length=gen_length,
-                                            sep=SEP,
-                                            w=config["w"],
-                                            device=device)
+                output = beam_search_decode(
+                    model=model,
+                    prompt=batch,
+                    gen_length=gen_length,
+                    sep=SEP,
+                    w=config["w"],
+                    device=device,
+                )
             outputs.extend(output)
             for o in output:
-                o['cond'] = tokenizer.decode(o['context'])
-                o['gen'] = tokenizer.decode(o['tokens'])
+                o["cond"] = tokenizer.decode(o["context"])
+                o["gen"] = tokenizer.decode(o["tokens"])
                 print(json.dumps(o), file=writer, flush=True)
     writer.close()
 
     ppl = utils.perplexity()
-    print('Perplexity for the generated texts:', ppl)
+    print("Perplexity for the generated texts:", ppl)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ def extract_sentence_pairs(tmx_file_path):
     root = tree.getroot()
 
     # Define the XML namespace (used for handling XML namespace in the TMX file)
-    ns = {'xml': 'http://www.w3.org/XML/1998/namespace'}
+    ns = {"xml": "http://www.w3.org/XML/1998/namespace"}
 
     # Initialize an empty list to store extracted sentence pairs
     sentence_pairs = []
@@ -28,13 +28,13 @@ def extract_sentence_pairs(tmx_file_path):
 
 
 # Replace 'en-fr.tmx' with the path to your TMX file
-tmx_file_path = './en-fr_sentence_pairs/en-fr.tmx'
+tmx_file_path = "./en-fr_sentence_pairs/en-fr.tmx"
 # Call the function to extract sentence pairs
 sentence_pairs = extract_sentence_pairs(tmx_file_path)
 
 # Save the extracted sentence pairs to a JSON file
-json_file_path = './en-fr_sentence_pairs/en-fr_sentence_pairs.json'
-with open(json_file_path, 'w', encoding='utf-8') as json_file:
+json_file_path = "./en-fr_sentence_pairs/en-fr_sentence_pairs.json"
+with open(json_file_path, "w", encoding="utf-8") as json_file:
     # Serialize the list of sentence pairs to JSON with indentation
     json.dump(sentence_pairs, json_file, ensure_ascii=False, indent=2)
 
