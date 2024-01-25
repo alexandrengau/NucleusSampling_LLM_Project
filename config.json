@@ -1,5 +1,5 @@
 {
-    "output_path" : "gen.dataset_100.jsonl",
+    "output_path" : "gen.dataset_100_topp_0_8.jsonl",
     "context_path" : "filtered.dataset_100.jsonl",
     "cache_path" : false,
     "model_name" : "gpt2",
@@ -8,7 +8,7 @@
     "tokens" : true,
     "t" : false,
     "k" : false,
-    "p" : 0.7,
+    "p" : 0.8,
     "w" : false,
     "n" : 5000,
     "fixed_length" : true,
