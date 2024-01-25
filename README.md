@@ -24,15 +24,27 @@ When your code will be tested, we will execute :
   > pip install -r requirements.txt
 
 
-- **config.json** The JSON file *config.json* contains the initialization of all variables parametrizing the *utils.py* and *implementation.py* files. These include the extraction paths for the data and write files, as well as the parameters for the compared techniques. For the top-k sampling set *k* to te desired value, *p* for the cumulated probability threshold of nucleus sampling, *w* for the width of the beam-search and finaly set *t* to a value between 0 and 1 if you wish to add a temperature parameter for top-k or nucleus sampling.
+- **config.json** The [config.json](config.json) file holds the initial values for various parameters in the [utils.py](utils.py) 
+and [implementation.py](implementation.py) files. These parameters determine settings such as data extraction paths, output file paths, and specific 
+parameters for different techniques. If you want to specify the top-k sampling, set the value of *k* accordingly. Set *p* 
+for the cumulative probability threshold in nucleus sampling, *w* for the width of the beam search, and finally, set *t* 
+to a value between 0 and 1 if you wish to introduce a temperature parameter for top-k or nucleus sampling.
 
 
-- **data** Into the folder *data* will automatically will be automatically downloaded the 'small' databases proposed by OpenAI for the gpt-2 model. The tokenized and filtered files will then be written there, enabling generation from prepared contexts. It will also contain the texts generated after calling the model and decoding.
+- **data** The 'small' databases provided by OpenAI for the gpt-2 model will be automatically downloaded into the [data](data) 
+folder. Subsequently, the tokenized and filtered files will be written there, facilitating the generation of content from 
+prepared contexts. The folder will also house the texts generated after calling the model and performing decoding.
 
 
-- **implementation.py** The main script *implementation.py* contains the two decoding functions for the studied methods as well as the the *main()*. 
-  - *main()*, the script will download the OpenAI databases if there are not locally present in the folder *data*. It will then proceed to the preprocessing (tokenization and filtering) of the file that will be used for the context creation (paths to be set in *config.json*). This chosen context will be loaded to serve as the input of the LLM model (we recommand gpt2 model) to then generate a  distribution over each word of its vocabulary for a lenght *gen_len* set in *config.json*. The decoding functions are called there. Finally the perplexity is computed for the generated texts.
-  - *decode(model=model,
+- **implementation.py** The primary script, [implementation.py](implementation.py), comprises the two decoding functions 
+for the studied methods, along with the *main()* function. The functions subsequently are :
+  - In the *main()* script, the program will automatically download the OpenAI databases if they are not already present 
+  in the *data* folder. Following that, it will proceed to preprocess the file through tokenization and filtering, which 
+  will be utilized for creating context (paths specified in *config.json*). The selected context will be loaded to serve 
+  as the input for the LLM, preferably the gpt2 model. The LLM model will then generate a distribution over each word in 
+  its vocabulary for a specified length (*gen_len* as set in *config.json*). The decoding functions are invoked at this 
+  stage. Finally, the perplexity for the generated texts is computed.
+  - The *decode(model=model,
             prompt=batch,
             batch_size=config["batch_size"],
             gen_len=gen_length,
@@ -40,17 +52,25 @@ When your code will be tested, we will execute :
             temp=config["t"],
             k=config["k"],
             p=config["p"],
-            device=device)* , the script will decode the distribution with top-k sampling or nucleus sampling techniques, with the possible addition of a temperature parameter. Note that if you want to decode using only the top-k sampling for example, parameters *p* and *t* has to be set to *false* in the *config.json*. The greedy search is obtained by setting *k* to one.
+            device=device)* script will use either top-k sampling or nucleus sampling techniques to decode the distribution, 
+  with the option of adding a temperature parameter. It's important to mention that if you wish to decode using only top-k sampling, 
+  for instance, you need to set parameters *p* and *t* to *false* in the *config.json*. Achieving a greedy search is done by setting *k* to one.
   - *beam_search_decode(model=model,
                         prompt=batch,
                         gen_length=gen_length,
                         sep=SEP,
                         w=config["w"],
-                        device=device)*, the function is called when the *w* parameter is activated and will decode the distribution with beam-search of width *w*.
+                        device=device)*, the function is called when the *w* parameter is enabled, and it decodes the 
+  distribution using a beam search with a width of *w*.
 
 
-- **utils.py** In the *utils.py* script, you will find all the auxiliary functions required to operate the main file *implementation.py*. These include functions such as *download_datasets()* directly taken from [OpenAI](https://github.com/openai/gpt-2-output-dataset) that download the dataset as described previously. The *encode_json()* and *filter_for_conditional()* functions transform raw files, such as those downloaded above, into files containing the tokens associated with the texts (.tokenized), as well as the texts that can be used for generation (.filtered) (i.e. containing at least one complete sentence).
-You'll also find the *load_dataset(dataset_path, batch_size, device, bs=False)* function, which acts as a Loader in the main script, as well as a perplexity calculation in *perplexity()* for generated texts.
+- **utils.py** In the [utils.py](utils.py) script, you'll discover all the auxiliary functions essential for the operation 
+of the main file *implementation.py*. These functions include, for example, *download_datasets()*, directly sourced from 
+[OpenAI](https://github.com/openai/gpt-2-output-dataset). This function downloads the dataset, as previously described. 
+Additionally, there are *encode_json()* and *filter_for_conditional()* functions that transform raw files (like those downloaded earlier) 
+into files containing tokens associated with the texts (.tokenized) and texts suitable for generation (.filtered), ensuring 
+they contain at least one complete sentence. Furthermore, the script contains the *load_dataset(dataset_path, batch_size, device, bs=False)* 
+function, serving as a loader in the main script. There's also a perplexity calculation function, *perplexity()*, designed for generated texts.
 
 To reproduce the results concerning open-ended generation, please set an appropriate context file as described before (usually a portion of the dowloaded ones), set the parameters of *config.json* for your desired results and run:
   > python implementation.py
